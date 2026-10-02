@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#eef2f7">
+<title>Visor de Matriz de Píxeles · 16×16 / 25×25</title>
+<style>
+  :root{
+    --bg1:#eef2f7;
+    --bg2:#e1e8f2;
+    --card:#ffffff;
+    --text:#1f2937;
+    --muted:#64748b;
+    --line:#cbd5e1;
+    --blue:#2563eb;
+    --blue-dark:#1d4ed8;
+    --red:#e11d48;
+  }
+
+  *{ box-sizing:border-box; }
+
+  [hidden]{ display:none !important; }
+
+  html,body{ height:100%; }
+
+  body{
+    margin:0;
+    padding:12px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    color:var(--text);
+    background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
+    background-attachment: fixed;
+    display:flex;
+    justify-content:center;
+    -webkit-text-size-adjust:100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app{
+    width:100%;
+    max-width:440px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    padding-bottom:18px;
+  }
+
+  /* ---------- Encabezado ---------- */
+  .header{ text-align:center; padding:2px 0 0; }
+  .header h1{
+    margin:0;
+    font-size:1.15rem;
+    letter-spacing:-.2px;
+  }
+  .header p{
+    margin:4px 0 0;
+    font-size:.78rem;
+    color:var(--muted);
+  }
+
+  /* ---------- Tarjetas ---------- */
+  .card{
+    background:var(--card);
+    border-radius:14px;
+    padding:12px;
+    box-shadow:0 6px 20px rgba(15,23,42,.08);
+  }
+
+  .card h2{
+    margin:0 0 10px;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.6px;
+    color:var(--muted);
+    font-weight:700;
+  }
+
+  /* ---------- Barra de herramientas ---------- */
+  .toolbar{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:stretch;
+  }
+
+  .btn, .select{
+    font:inherit;
+    font-size:.85rem;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#f8fafc;
+    color:var(--text);
+    cursor:pointer;
+    flex:1 1 120px;
+    text-align:center;
+    transition:background .15s, transform .05s;
+  }
+
+  .btn:active{ transform:translateY(1px); }
+
+  .btn-primary{
+    background:var(--blue);
+    border-color:var(--blue);
+    color:#fff;
+    font-weight:600;
+  }
+  .btn-primary:active{ background:var(--blue-dark); }
+
+  .select{
+    flex:1 1 150px;
+    appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat:no-repeat;
+    background-position:right 10px center;
+    padding-right:30px;
+  }
+
+  /* ---------- Lienzo ---------- */
+  .canvas-wrapper{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:200px;
+    padding:8px;
+    border:2px solid var(--line);
+    border-radius:12px;
+    background-color:#fff;
+    background-image:
+      linear-gradient(45deg,#e9edf3 25%, transparent 25%),
+      linear-gradient(-45deg,#e9edf3 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e9edf3 75%),
+      linear-gradient(-45deg, transparent 75%, #e9edf3 75%);
+    background-size:16px 16px;
+    background-position:0 0, 0 8px, 8px -8px, -8px 0;
+  }
+
+  canvas#view{
+    display:block;
+    max-width:100%;
+    height:auto;
+    border-radius:4px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor:crosshair;
+    touch-action:none;
+  }
+
+  .placeholder{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    padding:34px 12px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:.85rem;
+    line-height:1.35;
+  }
+  .placeholder .icon{ font-size:2.1rem; }
+  .placeholder p{ margin:0; }
+
+  .status{
+    margin:10px 0 0;
+    font-size:.72rem;
+    color:var(--muted);
+    text-align:center;
+    word-break:break-word;
+    min-height:1em;
+  }
+
+  /* ---------- Panel de información ---------- */
+  .info-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+  }
+
+  .info-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:6px;
+    background:#f1f5f9;
+    border-radius:8px;
+    padding:7px 9px;
+    font-size:.78rem;
+  }
+  .info-item.wide{ grid-column:1 / -1; }
+
+  .label{ color:var(--muted); font-weight:600; }
+
+  .value{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight:700;
+    color:var(--blue);
+    font-size:.8rem;
+  }
+
+  .swatch-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:10px;
+    font-size:.76rem;
+    color:var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .swatch{
+    width:36px;
+    height:36px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    flex:0 0 auto;
+    background:#fff;
+    background-image:
+      linear-gradient(45deg,#e9edf3 25%, transparent 25%),
+      linear-gradient(-45deg,#e9edf3 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e9edf3 75%),
+      linear-gradient(-45deg, transparent 75%, #e9edf3 75%);
+    background-size:10px 10px;
+    background-position:0 0, 0 5px, 5px -5px, -5px 0;
+  }
+
+  /* ---------- D-Pad / Joystick ---------- */
+  .joystick{ text-align:center; }
+
+  .d-pad{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:6px;
+    width:min(232px, 72vw);
+    margin:0 auto;
+  }
+
+  .d-btn{
+    aspect-ratio:1 / 1;
+    border:none;
+    border-radius:13px;
+    background:#1e293b;
+    color:#f8fafc;
+    font-size:1.15rem;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 4px 0 #0f172a;
+    cursor:pointer;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:manipulation;
+    transition:transform .05s ease, box-shadow .05s ease, background .12s;
+  }
+
+  .d-btn:active,
+  .d-btn.active{
+    background:#334155;
+    box-shadow:0 1px 0 #0f172a;
+    transform:translateY(3px);
+  }
+
+  .d-btn.up    { grid-area:1 / 2; }
+  .d-btn.left  { grid-area:2 / 1; }
+  .d-btn.right { grid-area:2 / 3; }
+  .d-btn.down  { grid-area:3 / 2; }
+
+  .d-btn.ok{
+    grid-area:2 / 2;
+    background:var(--blue);
+    box-shadow:0 4px 0 #1e40af;
+    font-size:.9rem;
+  }
+  .d-btn.ok:active,
+  .d-btn.ok.active{
+    background:#3b82f6;
+    box-shadow:0 1px 0 #1e40af;
+  }
+
+  .hint{
+    margin:10px 0 0;
+    font-size:.7rem;
+    color:#94a3b8;
+    font-style:italic;
+    line-height:1.4;
+  }
+
+  /* ---------- Ajustes pantallas chicas ---------- */
+  @media (max-width:360px){
+    .header h1{ font-size:1.02rem; }
+    .btn, .select{ font-size:.8rem; padding:9px 10px; }
+    .info-item{ font-size:.72rem; padding:6px 8px; }
+    .value{ font-size:.74rem; }
+  }
+</style>
+</head>
+<body>
+
+<main class="app">
+
+  <header class="header">
+    <h1>Visor de Matriz de Píxeles</h1>
+    <p>Inspección de imágenes PNG · 16 × 16 y 25 × 25</p>
+  </header>
+
+  <!-- ===== Carga / configuración ===== -->
+  <section class="card toolbar">
+    <label class="btn btn-primary" for="fileInput">📁 Cargar PNG</label>
+    <input id="fileInput" type="file" accept="image/png,image/bmp,image/jpeg,image/*" hidden>
+
+    <select id="sizeSelect" class="select" aria-label="Tamaño de la matriz">
+      <option value="auto">Auto (según imagen)</option>
+      <option value="16">Matriz 16 × 16</option>
+      <option value="25">Matriz 25 × 25</option>
+    </select>
+
+    <button id="demoBtn" class="btn" type="button">✨ Ejemplo</button>
+  </section>
+
+  <!-- ===== Visor ===== -->
+  <section class="card">
+    <div class="canvas-wrapper">
+      <canvas id="view" width="300" height="300" hidden></canvas>
+      <div id="placeholder" class="placeholder">
+        <span class="icon">🖼️</span>
+        <p>Carga una imagen PNG de 16×16 o 25×25<br>o toca <strong>Ejemplo</strong> para probar</p>
+      </div>
+    </div>
+    <p class="status" id="status">Sin imagen cargada</p>
+  </section>
+
+  <!-- ===== Datos del píxel ===== -->
+  <section class="card">
+    <h2>Píxel seleccionado</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="label">Fila (Y)</span>
+        <span class="value" id="coordY">–</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Columna (X)</span>
+        <span class="value" id="coordX">–</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Grises</span>
+        <span class="value" id="grayValue">–</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Tipo</span>
+        <span class="value" id="tipoValue">–</span>
+      </div>
+      <div class="info-item wide">
+        <span class="label">RGB</span>
+        <span class="value" id="rgbValue">–</span>
+      </div>
+      <div class="info-item wide">
+        <span class="label">HEX</span>
+        <span class="value" id="hexValue">–</span>
+      </div>
+    </div>
+    <div class="swatch-row">
+      <div class="swatch" id="swatch"></div>
+      <span id="swatchText">—</span>
+    </div>
+  </section>
+
+  <!-- ===== Control tipo joystick ===== -->
+  <section class="card joystick">
+    <h2>Control de navegación</h2>
+    <div class="d-pad">
+      <button class="d-btn up"    data-dy="-1" data-dx="0"  aria-label="Arriba"    type="button">▲</button>
+      <button class="d-btn left"  data-dy="0"  data-dx="-1" aria-label="Izquierda" type="button">◀</button>
+      <button class="d-btn ok"    data-ok="1"               aria-label="Centrar"   type="button">◎</button>
+      <button class="d-btn right" data-dy="0"  data-dx="1"  aria-label="Derecha"   type="button">▶</button>
+      <button class="d-btn down"  data-dy="1"  data-dx="0"  aria-label="Abajo"     type="button">▼</button>
+    </div>
+    <p class="hint">
+      Mantén presionada una flecha para moverte rápido.<br>
+      También puedes tocar o arrastrar el dedo sobre la imagen,<br>
+      o usar las flechas del teclado.
+    </p>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     Referencias del DOM
+     ============================================================ */
+  const canvas      = document.getElementById('view');
+  const ctx         = canvas.getContext('2d');
+  const placeholder = document.getElementById('placeholder');
+  const statusEl    = document.getElementById('status');
+  const fileInput   = document.getElementById('fileInput');
+  const sizeSelect  = document.getElementById('sizeSelect');
+  const demoBtn     = document.getElementById('demoBtn');
+
+  const ui = {
+    coordY:     document.getElementById('coordY'),
+    coordX:     document.getElementById('coordX'),
+    gray:       document.getElementById('grayValue'),
+    tipo:       document.getElementById('tipoValue'),
+    rgb:        document.getElementById('rgbValue'),
+    hex:        document.getElementById('hexValue'),
+    swatch:     document.getElementById('swatch'),
+    swatchText: document.getElementById('swatchText')
+  };
+
+  /* Lienzo auxiliar 1:1 (fuente real de los datos de color) */
+  const srcCanvas = document.createElement('canvas');
+  const srcCtx    = srcCanvas.getContext('2d', { willReadFrequently: true });
+
+  /* ============================================================
+     Estado
+     ============================================================ */
+  const state = {
+    loaded: false,
+    gw: 0,        // ancho de la matriz (columnas)
+    gh: 0,        // alto de la matriz (filas)
+    px: 16,       // tamaño en píxeles de pantalla de cada celda
+    cx: 0,        // columna del cursor
+    cy: 0         // fila del cursor
+  };
+
+  let ultimoArchivo = null;   // File cargado por el usuario
+  let esDemo        = false;  // el contenido actual es el ejemplo generado
+  let arrastrando   = false;  // gesto sobre el lienzo
+
+  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+  function vibrar(ms) {
+    if (navigator.vibrate) {
+      try { navigator.vibrate(ms); } catch (_) {}
+    }
+  }
+
+  /* ============================================================
+     Carga de imágenes
+     ============================================================ */
+  function leerArchivo(file) {
+    if (!file || !file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen (PNG).');
+      return;
+    }
+    ultimoArchivo = file;
+    esDemo = false;
+
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      prepararFuente(img, file.name);
+    };
+
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      alert('No se pudo leer la imagen. Verifica que sea un PNG válido.');
+    };
+
+    img.src = url;
+  }
+
+  /* ============================================================
+     Preparar la matriz (fuente -> lienzo 1:1 -> lienzo visible)
+     ============================================================ */
+  function prepararFuente(fuente, nombre, tamanoForzado) {
+    const anchoN = fuente.naturalWidth  || fuente.width;
+    const altoN  = fuente.naturalHeight || fuente.height;
+
+    if (!anchoN || !altoN) {
+      alert('No se pudo determinar el tamaño de la imagen.');
+      return;
+    }
+
+    let gw, gh;
+
+    if (tamanoForzado) {
+      gw = gh = tamanoForzado;
+    } else if (sizeSelect.value === 'auto') {
+      gw = anchoN;
+      gh = altoN;
+    } else {
+      gw = gh = parseInt(sizeSelect.value, 10);
+    }
+
+    /* --- Lienzo 1:1 con la matriz real --- */
+    srcCanvas.width  = gw;
+    srcCanvas.height = gh;
+    srcCtx.imageSmoothingEnabled = false;
+    srcCtx.clearRect(0, 0, gw, gh);
+    srcCtx.drawImage(fuente, 0, 0, gw, gh);
+
+    /* --- Estado --- */
+    state.gw = gw;
+    state.gh = gh;
+    state.px = Math.max(2, Math.floor(360 / Math.max(gw, gh)));
+    state.cx = Math.floor(gw / 2);
+    state.cy = Math.floor(gh / 2);
+    state.loaded = true;
+
+    /* --- Lienzo visible --- */
+    canvas.width  = gw * state.px;
+    canvas.height = gh * state.px;
+
+    canvas.hidden = false;
+    placeholder.hidden = true;
+
+    /* --- Estado textual --- */
+    let txt = (nombre || 'Imagen') + ' · matriz ' + gw + '×' + gh;
+    if (anchoN !== gw || altoN !== gh) {
+      txt += ' (reescalada desde ' + anchoN + '×' + altoN + ')';
+    }
+    if (gw !== gh) txt += ' · ⚠ no cuadrada';
+    statusEl.textContent = txt;
+
+    redibujar();
+    actualizarInfo();
+  }
+
+  /* ============================================================
+     Dibujo
+     ============================================================ */
+  function redibujar() {
+    if (!state.loaded) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(srcCanvas, 0, 0, state.gw, state.gh, 0, 0, W, H);
+
+    dibujarCruz();
+  }
+
+  /* Cruz roja + recuadro que marca el píxel seleccionado.
+     Las líneas no tocan el píxel (dejan un hueco) para que su
+     color real siga siendo visible. */
+  function dibujarCruz() {
+    const px = state.px;
+    const W  = canvas.width;
+    const H  = canvas.height;
+
+    const x0 = state.cx * px;
+    const y0 = state.cy * px;
+    const mx = x0 + px / 2;
+    const my = y0 + px / 2;
+    const hueco = Math.max(1, Math.round(px * 0.14));
+
+    function trazar(ancho, color) {
+      ctx.lineWidth   = ancho;
+      ctx.strokeStyle = color;
+
+      ctx.beginPath();
+      /* Vertical arriba */
+      if (y0 - hueco > 0) {
+        ctx.moveTo(mx, 0);
+        ctx.lineTo(mx, y0 - hueco);
+      }
+      /* Vertical abajo */
+      if (y0 + px + hueco < H) {
+        ctx.moveTo(mx, y0 + px + hueco);
+        ctx.lineTo(mx, H);
+      }
+      /* Horizontal izquierda */
+      if (x0 - hueco > 0) {
+        ctx.moveTo(0, my);
+        ctx.lineTo(x0 - hueco, my);
+      }
+      /* Horizontal derecha */
+      if (x0 + px + hueco < W) {
+        ctx.moveTo(x0 + px + hueco, my);
+        ctx.lineTo(W, my);
+      }
+      ctx.stroke();
+
+      /* Recuadro alrededor del píxel */
+      const inset = ancho / 2;
+      ctx.strokeRect(x0 + inset, y0 + inset, px - ancho, px - ancho);
+    }
+
+    /* Pasada blanca (contraste sobre fondos oscuros) y pasada roja */
+    trazar(Math.max(3, px * 0.24), 'rgba(255,255,255,0.95)');
+    trazar(Math.max(1.5, px * 0.12), '#e11d48');
+  }
+
+  /* ============================================================
+     Información del píxel
+     ============================================================ */
+  function actualizarInfo() {
+    if (!state.loaded) return;
+
+    const d = srcCtx.getImageData(state.cx, state.cy, 1, 1).data;
+
+    const a = d[3] / 255;
+    /* Composición sobre blanco: así el valor de grises es el que
+       realmente se "ve" cuando el PNG tiene transparencia. */
+    const r = Math.round(d[0] * a + 255 * (1 - a));
+    const g = Math.round(d[1] * a + 255 * (1 - a));
+    const b = Math.round(d[2] * a + 255 * (1 - a));
+
+    const gris  = Math.round((r + g + b) / 3);
+    const esGris = (r === g && g === b);
+
+    ui.coordY.textContent = state.cy;
+    ui.coordX.textContent = state.cx;
+    ui.gray.textContent   = gris;
+    ui.tipo.textContent   = esGris ? 'Gris' : 'Color';
+
+    const alphaTxt = (d[3] < 255) ? '  (α ' + d[3] + ')' : '';
+    ui.rgb.textContent = r + ', ' + g + ', ' + b + alphaTxt;
+
+    const hex = '#' + [r, g, b]
+      .map(v => v.toString(16).padStart(2, '0').toUpperCase())
+      .join('');
+    ui.hex.textContent = hex;
+
+    ui.swatch.style.backgroundColor = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ui.swatchText.textContent = 'rgb(' + r + ', ' + g + ', ' + b + ')' +
+                                (esGris ? '  ·  escala de grises' : '');
+  }
+
+  /* ============================================================
+     Movimiento del cursor
+     ============================================================ */
+  function mover(dy, dx) {
+    if (!state.loaded) return;
+
+    state.cy = clamp(state.cy + dy, 0, state.gh - 1);
+    state.cx = clamp(state.cx + dx, 0, state.gw - 1);
+
+    redibujar();
+    actualizarInfo();
+  }
+
+  function centrarCursor() {
+    if (!state.loaded) return;
+
+    state.cx = Math.floor(state.gw / 2);
+    state.cy = Math.floor(state.gh / 2);
+
+    redibujar();
+    actualizarInfo();
+  }
+
+  /* ============================================================
+     Interacción directa sobre el lienzo (tap + arrastre)
+     ============================================================ */
+  function seleccionarDesdeEvento(e) {
+    const rect = canvas.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top)  / rect.height;
+
+    const x = clamp(Math.floor(nx * state.gw), 0, state.gw - 1);
+    const y = clamp(Math.floor(ny * state.gh), 0, state.gh - 1);
+
+    if (x === state.cx && y === state.cy) return;
+
+    state.cx = x;
+    state.cy = y;
+
+    redibujar();
+    actualizarInfo();
+  }
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!state.loaded) return;
+    arrastrando = true;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    seleccionarDesdeEvento(e);
+    e.preventDefault();
+  });
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (!arrastrando || !state.loaded) return;
+    seleccionarDesdeEvento(e);
+    e.preventDefault();
+  });
+
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+    canvas.addEventListener(ev, function (e) {
+      arrastrando = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    });
+  });
+
+  /* ============================================================
+     Botones del D-Pad (con repetición al mantener presionado)
+     ============================================================ */
+  document.querySelectorAll('.d-btn').forEach(function (btn) {
+    const esCentro = btn.hasAttribute('data-ok');
+    const dy = parseInt(btn.dataset.dy || '0', 10);
+    const dx = parseInt(btn.dataset.dx || '0', 10);
+
+    let tInicio = null;
+    let tRepetir = null;
+
+    function accion() {
+      if (esCentro) centrarCursor();
+      else mover(dy, dx);
+    }
+
+    function detener() {
+      clearTimeout(tInicio);
+      clearInterval(tRepetir);
+      tInicio = tRepetir = null;
+      btn.classList.remove('active');
+    }
+
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      btn.classList.add('active');
+      accion();
+      vibrar(8);
+      detener();
+      btn.classList.add('active');
+      tInicio = setTimeout(function () {
+        tRepetir = setInterval(function () {
+          accion();
+          vibrar(4);
+        }, 90);
+      }, 330);
+    });
+
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+      btn.addEventListener(ev, detener);
+    });
+
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  });
+
+  /* ============================================================
+     Teclado
+     ============================================================ */
+  window.addEventListener('keydown', function (e) {
+    if (!state.loaded) return;
+
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    let dy = 0, dx = 0;
+
+    switch (e.key) {
+      case 'ArrowUp':    case 'w': case 'W': dy = -1; break;
+      case 'ArrowDown':  case 's': case 'S': dy =  1; break;
+      case 'ArrowLeft':  case 'a': case 'A': dx = -1; break;
+      case 'ArrowRight': case 'd': case 'D': dx =  1; break;
+      case 'Home':       centrarCursor(); e.preventDefault(); return;
+      default: return;
+    }
+
+    e.preventDefault();
+    mover(dy, dx);
+  });
+
+  /* ============================================================
+     Selector de tamaño: re-procesa el contenido actual
+     ============================================================ */
+  sizeSelect.addEventListener('change', function () {
+    if (ultimoArchivo) {
+      leerArchivo(ultimoArchivo);
+    } else if (esDemo) {
+      cargarEjemplo();
+    }
+  });
+
+  /* ============================================================
+     Imagen de ejemplo generada por código
+     ============================================================ */
+  function cargarEjemplo() {
+    const n = (sizeSelect.value === '16') ? 16 : 25;
+
+    const c   = document.createElement('canvas');
+    c.width   = n;
+    c.height  = n;
+    const cx2 = c.getContext('2d');
+    const data = cx2.createImageData(n, n);
+
+    const centro = (n - 1) / 2;
+    const radio  = n * 0.42;
+
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const i = (y * n + x) * 4;
+        const dist = Math.sqrt((x - centro) * (x - centro) +
+                               (y - centro) * (y - centro));
+
+        let r, g, b;
+
+        if (dist < radio) {
+          const t = (x + y) / (2 * (n - 1));
+          r = Math.round(40  + 180 * t);
+          g = Math.round(90  + 130 * (1 - t));
+          b = Math.round(170 + 70  * t);
+        } else {
+          const v = ((x + y) % 2 === 0) ? 236 : 205;
+          r = g = b = v;
+        }
+
+        if (dist >= radio && dist < radio + 1) {
+          r = g = b = 25;   /* contorno oscuro */
+        }
+
+        data.data[i]     = r;
+        data.data[i + 1] = g;
+        data.data[i + 2] = b;
+        data.data[i + 3] = 255;
+      }
+    }
+
+    cx2.putImageData(data, 0, 0);
+
+    ultimoArchivo = null;
+    esDemo = true;
+    prepararFuente(c, 'ejemplo.png', n);
+  }
+
+  /* ============================================================
+     Eventos de carga
+     ============================================================ */
+  fileInput.addEventListener('change', function (e) {
+    const f = e.target.files && e.target.files[0];
+    if (f) leerArchivo(f);
+    fileInput.value = '';   /* permite recargar el mismo archivo */
+  });
+
+  demoBtn.addEventListener('click', cargarEjemplo);
+
+  /* Arrastrar y soltar sobre la página */
+  ['dragenter', 'dragover', 'drop'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); });
+  });
+
+  document.addEventListener('drop', function (e) {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) leerArchivo(f);
+  });
+
+})();
+</script>
+</body>
+</html>
