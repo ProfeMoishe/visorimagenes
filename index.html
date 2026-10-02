@@ -19,7 +19,6 @@
   }
 
   *{ box-sizing:border-box; }
-
   [hidden]{ display:none !important; }
 
   html,body{ height:100%; }
@@ -48,16 +47,8 @@
 
   /* ---------- Encabezado ---------- */
   .header{ text-align:center; padding:2px 0 0; }
-  .header h1{
-    margin:0;
-    font-size:1.15rem;
-    letter-spacing:-.2px;
-  }
-  .header p{
-    margin:4px 0 0;
-    font-size:.78rem;
-    color:var(--muted);
-  }
+  .header h1{ margin:0; font-size:1.15rem; letter-spacing:-.2px; }
+  .header p{ margin:4px 0 0; font-size:.78rem; color:var(--muted); }
 
   /* ---------- Tarjetas ---------- */
   .card{
@@ -162,6 +153,7 @@
   .placeholder .icon{ font-size:2.1rem; }
   .placeholder p{ margin:0; }
 
+  /* ---------- Mensajes de estado ---------- */
   .status{
     margin:10px 0 0;
     font-size:.72rem;
@@ -169,6 +161,35 @@
     text-align:center;
     word-break:break-word;
     min-height:1em;
+    padding:0;
+    border-radius:8px;
+    transition:background .15s, color .15s;
+  }
+
+  .status.ok{
+    color:#166534;
+    background:#dcfce7;
+    border:1px solid #bbf7d0;
+    padding:7px 9px;
+    font-weight:600;
+  }
+
+  .status.warn{
+    color:#92400e;
+    background:#fef3c7;
+    border:1px solid #fde68a;
+    padding:7px 9px;
+    font-weight:600;
+  }
+
+  .status.error{
+    color:#991b1b;
+    background:#fee2e2;
+    border:1px solid #fecaca;
+    padding:9px 10px;
+    font-weight:700;
+    font-size:.78rem;
+    line-height:1.35;
   }
 
   /* ---------- Panel de información ---------- */
@@ -225,7 +246,7 @@
     background-position:0 0, 0 5px, 5px -5px, -5px 0;
   }
 
-  /* ---------- D-Pad / Joystick ---------- */
+  /* ---------- D-Pad ---------- */
   .joystick{ text-align:center; }
 
   .d-pad{
@@ -287,7 +308,7 @@
     line-height:1.4;
   }
 
-  /* ---------- Ajustes pantallas chicas ---------- */
+  /* ---------- Pantallas chicas ---------- */
   @media (max-width:360px){
     .header h1{ font-size:1.02rem; }
     .btn, .select{ font-size:.8rem; padding:9px 10px; }
@@ -311,9 +332,9 @@
     <input id="fileInput" type="file" accept="image/png,image/bmp,image/jpeg,image/*" hidden>
 
     <select id="sizeSelect" class="select" aria-label="Tamaño de la matriz">
-      <option value="auto">Auto (según imagen)</option>
-      <option value="16">Matriz 16 × 16</option>
-      <option value="25">Matriz 25 × 25</option>
+      <option value="auto">Auto (solo 16 o 25)</option>
+      <option value="16">Forzar 16 × 16</option>
+      <option value="25">Forzar 25 × 25</option>
     </select>
 
     <button id="demoBtn" class="btn" type="button">✨ Ejemplo</button>
@@ -415,28 +436,60 @@
   const srcCanvas = document.createElement('canvas');
   const srcCtx    = srcCanvas.getContext('2d', { willReadFrequently: true });
 
+  /* Tamaños permitidos */
+  const TAMANOS_VALIDOS = [16, 25];
+
   /* ============================================================
      Estado
      ============================================================ */
   const state = {
     loaded: false,
-    gw: 0,        // ancho de la matriz (columnas)
-    gh: 0,        // alto de la matriz (filas)
-    px: 16,       // tamaño en píxeles de pantalla de cada celda
-    cx: 0,        // columna del cursor
-    cy: 0         // fila del cursor
+    gw: 0,
+    gh: 0,
+    px: 16,
+    cx: 0,
+    cy: 0
   };
 
-  let ultimoArchivo = null;   // File cargado por el usuario
-  let esDemo        = false;  // el contenido actual es el ejemplo generado
-  let arrastrando   = false;  // gesto sobre el lienzo
+  let ultimoArchivo = null;
+  let esDemo        = false;
+  let arrastrando   = false;
 
   const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 
   function vibrar(ms) {
-    if (navigator.vibrate) {
-      try { navigator.vibrate(ms); } catch (_) {}
-    }
+    if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
+  }
+
+  /* ============================================================
+     Mensajes de estado
+     ============================================================ */
+  function ponerEstado(texto, tipo) {
+    // tipo: 'ok' | 'warn' | 'error' | undefined
+    statusEl.classList.remove('ok', 'warn', 'error');
+    if (tipo) statusEl.classList.add(tipo);
+    statusEl.textContent = texto;
+  }
+
+  /* Limpia los datos del panel de píxel */
+  function limpiarInfo() {
+    ui.coordY.textContent = '–';
+    ui.coordX.textContent = '–';
+    ui.gray.textContent   = '–';
+    ui.tipo.textContent   = '–';
+    ui.rgb.textContent    = '–';
+    ui.hex.textContent    = '–';
+    ui.swatch.style.backgroundColor = '#ffffff';
+    ui.swatchText.textContent = '—';
+  }
+
+  /* Muestra un error y oculta el canvas */
+  function mostrarError(mensaje) {
+    state.loaded = false;
+    canvas.hidden = true;
+    placeholder.hidden = false;
+    ponerEstado(mensaje, 'error');
+    limpiarInfo();
   }
 
   /* ============================================================
@@ -444,7 +497,7 @@
      ============================================================ */
   function leerArchivo(file) {
     if (!file || !file.type.startsWith('image/')) {
-      alert('Por favor selecciona un archivo de imagen (PNG).');
+      ponerEstado('El archivo seleccionado no es una imagen.', 'error');
       return;
     }
     ultimoArchivo = file;
@@ -460,33 +513,59 @@
 
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      alert('No se pudo leer la imagen. Verifica que sea un PNG válido.');
+      ponerEstado('No se pudo leer la imagen. Verifica que sea un PNG válido.', 'error');
+      canvas.hidden = true;
+      placeholder.hidden = false;
     };
 
     img.src = url;
   }
 
   /* ============================================================
-     Preparar la matriz (fuente -> lienzo 1:1 -> lienzo visible)
+     Validación + preparación de la matriz
      ============================================================ */
   function prepararFuente(fuente, nombre, tamanoForzado) {
     const anchoN = fuente.naturalWidth  || fuente.width;
     const altoN  = fuente.naturalHeight || fuente.height;
 
     if (!anchoN || !altoN) {
-      alert('No se pudo determinar el tamaño de la imagen.');
+      mostrarError('No se pudo determinar el tamaño de la imagen.');
       return;
     }
 
     let gw, gh;
+    let advertir = false;   // true → se muestra advertencia amarilla
+    let nota = '';
 
     if (tamanoForzado) {
+      /* El ejemplo interno o un forzado explícito del usuario */
       gw = gh = tamanoForzado;
+      if (anchoN !== tamanoForzado || altoN !== tamanoForzado) {
+        advertir = true;
+        nota = 'Imagen original ' + anchoN + '×' + altoN +
+               ', reescalada a ' + tamanoForzado + '×' + tamanoForzado + '.';
+      }
     } else if (sizeSelect.value === 'auto') {
-      gw = anchoN;
-      gh = altoN;
+      /* Modo automático: SOLO 16×16 o 25×25 exactos */
+      const esCuadrada = (anchoN === altoN);
+      const esValida   = esCuadrada && TAMANOS_VALIDOS.indexOf(anchoN) !== -1;
+
+      if (!esValida) {
+        mostrarError(
+          '⚠ Formato no válido: la imagen debe ser de 16×16 o 25×25 píxeles. ' +
+          'Esta imagen mide ' + anchoN + '×' + altoN + '.'
+        );
+        return;
+      }
+      gw = gh = anchoN;
     } else {
+      /* Forzado manual desde el <select> */
       gw = gh = parseInt(sizeSelect.value, 10);
+      if (anchoN !== gw || altoN !== gh) {
+        advertir = true;
+        nota = 'Imagen original ' + anchoN + '×' + altoN +
+               ', reescalada a ' + gw + '×' + gh + '.';
+      }
     }
 
     /* --- Lienzo 1:1 con la matriz real --- */
@@ -507,17 +586,16 @@
     /* --- Lienzo visible --- */
     canvas.width  = gw * state.px;
     canvas.height = gh * state.px;
-
     canvas.hidden = false;
     placeholder.hidden = true;
 
-    /* --- Estado textual --- */
-    let txt = (nombre || 'Imagen') + ' · matriz ' + gw + '×' + gh;
-    if (anchoN !== gw || altoN !== gh) {
-      txt += ' (reescalada desde ' + anchoN + '×' + altoN + ')';
+    /* --- Mensaje --- */
+    const base = (nombre || 'Imagen') + ' · matriz ' + gw + '×' + gh;
+    if (advertir) {
+      ponerEstado('⚠ ' + base + ' · ' + nota, 'warn');
+    } else {
+      ponerEstado('✔ ' + base + ' · formato correcto', 'ok');
     }
-    if (gw !== gh) txt += ' · ⚠ no cuadrada';
-    statusEl.textContent = txt;
 
     redibujar();
     actualizarInfo();
@@ -539,9 +617,6 @@
     dibujarCruz();
   }
 
-  /* Cruz roja + recuadro que marca el píxel seleccionado.
-     Las líneas no tocan el píxel (dejan un hueco) para que su
-     color real siga siendo visible. */
   function dibujarCruz() {
     const px = state.px;
     const W  = canvas.width;
@@ -558,34 +633,16 @@
       ctx.strokeStyle = color;
 
       ctx.beginPath();
-      /* Vertical arriba */
-      if (y0 - hueco > 0) {
-        ctx.moveTo(mx, 0);
-        ctx.lineTo(mx, y0 - hueco);
-      }
-      /* Vertical abajo */
-      if (y0 + px + hueco < H) {
-        ctx.moveTo(mx, y0 + px + hueco);
-        ctx.lineTo(mx, H);
-      }
-      /* Horizontal izquierda */
-      if (x0 - hueco > 0) {
-        ctx.moveTo(0, my);
-        ctx.lineTo(x0 - hueco, my);
-      }
-      /* Horizontal derecha */
-      if (x0 + px + hueco < W) {
-        ctx.moveTo(x0 + px + hueco, my);
-        ctx.lineTo(W, my);
-      }
+      if (y0 - hueco > 0)      { ctx.moveTo(mx, 0);            ctx.lineTo(mx, y0 - hueco); }
+      if (y0 + px + hueco < H) { ctx.moveTo(mx, y0 + px + hueco); ctx.lineTo(mx, H); }
+      if (x0 - hueco > 0)      { ctx.moveTo(0, my);            ctx.lineTo(x0 - hueco, my); }
+      if (x0 + px + hueco < W) { ctx.moveTo(x0 + px + hueco, my); ctx.lineTo(W, my); }
       ctx.stroke();
 
-      /* Recuadro alrededor del píxel */
       const inset = ancho / 2;
       ctx.strokeRect(x0 + inset, y0 + inset, px - ancho, px - ancho);
     }
 
-    /* Pasada blanca (contraste sobre fondos oscuros) y pasada roja */
     trazar(Math.max(3, px * 0.24), 'rgba(255,255,255,0.95)');
     trazar(Math.max(1.5, px * 0.12), '#e11d48');
   }
@@ -599,13 +656,11 @@
     const d = srcCtx.getImageData(state.cx, state.cy, 1, 1).data;
 
     const a = d[3] / 255;
-    /* Composición sobre blanco: así el valor de grises es el que
-       realmente se "ve" cuando el PNG tiene transparencia. */
     const r = Math.round(d[0] * a + 255 * (1 - a));
     const g = Math.round(d[1] * a + 255 * (1 - a));
     const b = Math.round(d[2] * a + 255 * (1 - a));
 
-    const gris  = Math.round((r + g + b) / 3);
+    const gris   = Math.round((r + g + b) / 3);
     const esGris = (r === g && g === b);
 
     ui.coordY.textContent = state.cy;
@@ -627,30 +682,26 @@
   }
 
   /* ============================================================
-     Movimiento del cursor
+     Movimiento
      ============================================================ */
   function mover(dy, dx) {
     if (!state.loaded) return;
-
     state.cy = clamp(state.cy + dy, 0, state.gh - 1);
     state.cx = clamp(state.cx + dx, 0, state.gw - 1);
-
     redibujar();
     actualizarInfo();
   }
 
   function centrarCursor() {
     if (!state.loaded) return;
-
     state.cx = Math.floor(state.gw / 2);
     state.cy = Math.floor(state.gh / 2);
-
     redibujar();
     actualizarInfo();
   }
 
   /* ============================================================
-     Interacción directa sobre el lienzo (tap + arrastre)
+     Interacción sobre el lienzo
      ============================================================ */
   function seleccionarDesdeEvento(e) {
     const rect = canvas.getBoundingClientRect();
@@ -661,10 +712,7 @@
     const y = clamp(Math.floor(ny * state.gh), 0, state.gh - 1);
 
     if (x === state.cx && y === state.cy) return;
-
-    state.cx = x;
-    state.cy = y;
-
+    state.cx = x; state.cy = y;
     redibujar();
     actualizarInfo();
   }
@@ -691,15 +739,14 @@
   });
 
   /* ============================================================
-     Botones del D-Pad (con repetición al mantener presionado)
+     D-Pad con repetición al mantener presionado
      ============================================================ */
   document.querySelectorAll('.d-btn').forEach(function (btn) {
     const esCentro = btn.hasAttribute('data-ok');
     const dy = parseInt(btn.dataset.dy || '0', 10);
     const dx = parseInt(btn.dataset.dx || '0', 10);
 
-    let tInicio = null;
-    let tRepetir = null;
+    let tInicio = null, tRepetir = null;
 
     function accion() {
       if (esCentro) centrarCursor();
@@ -715,9 +762,9 @@
 
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
-      btn.classList.add('active');
       accion();
       vibrar(8);
+      btn.classList.add('active');
       detener();
       btn.classList.add('active');
       tInicio = setTimeout(function () {
@@ -740,27 +787,24 @@
      ============================================================ */
   window.addEventListener('keydown', function (e) {
     if (!state.loaded) return;
-
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
     let dy = 0, dx = 0;
-
     switch (e.key) {
       case 'ArrowUp':    case 'w': case 'W': dy = -1; break;
       case 'ArrowDown':  case 's': case 'S': dy =  1; break;
       case 'ArrowLeft':  case 'a': case 'A': dx = -1; break;
       case 'ArrowRight': case 'd': case 'D': dx =  1; break;
-      case 'Home':       centrarCursor(); e.preventDefault(); return;
+      case 'Home': centrarCursor(); e.preventDefault(); return;
       default: return;
     }
-
     e.preventDefault();
     mover(dy, dx);
   });
 
   /* ============================================================
-     Selector de tamaño: re-procesa el contenido actual
+     Selector de tamaño: re-procesa lo que esté cargado
      ============================================================ */
   sizeSelect.addEventListener('change', function () {
     if (ultimoArchivo) {
@@ -788,8 +832,7 @@
     for (let y = 0; y < n; y++) {
       for (let x = 0; x < n; x++) {
         const i = (y * n + x) * 4;
-        const dist = Math.sqrt((x - centro) * (x - centro) +
-                               (y - centro) * (y - centro));
+        const dist = Math.sqrt((x - centro) ** 2 + (y - centro) ** 2);
 
         let r, g, b;
 
@@ -804,7 +847,7 @@
         }
 
         if (dist >= radio && dist < radio + 1) {
-          r = g = b = 25;   /* contorno oscuro */
+          r = g = b = 25;
         }
 
         data.data[i]     = r;
@@ -827,12 +870,11 @@
   fileInput.addEventListener('change', function (e) {
     const f = e.target.files && e.target.files[0];
     if (f) leerArchivo(f);
-    fileInput.value = '';   /* permite recargar el mismo archivo */
+    fileInput.value = '';
   });
 
   demoBtn.addEventListener('click', cargarEjemplo);
 
-  /* Arrastrar y soltar sobre la página */
   ['dragenter', 'dragover', 'drop'].forEach(function (ev) {
     document.addEventListener(ev, function (e) { e.preventDefault(); });
   });
